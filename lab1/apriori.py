@@ -7,13 +7,12 @@ import numpy as np
 
 class Apriori:
     def __init__(self, path):
-        self.checks = self.read_checks(path)   # список чеков, каждый чек - множество товаров
-        self.count = len(self.checks)          # сколько всего чеков
-        self.start = self.get_start()          # все различные товары
-        self.all_frequent_items = {}           # результат: {набор: поддержка}
+        self.checks = self.read_checks(path)
+        self.count = len(self.checks)
+        self.start = self.get_start()
+        self.all_frequent_items = {}
 
     def read_checks(self, path):
-        # пробуем utf-8, если не получилось - cp1251 (виндовая кодировка для русского)
         for enc in ("utf-8-sig", "cp1251"):
             try:
                 checks = []
@@ -28,7 +27,6 @@ class Apriori:
         raise ValueError("Не удалось прочитать файл " + path)
 
     def supp(self, products):
-        # поддержка = доля чеков, в которых есть ВСЕ товары набора
         products = set(products)
         support = 0
         for check in self.checks:
@@ -36,41 +34,37 @@ class Apriori:
                 support += 1
         return support / self.count
 
+    # получение список всех продуктов без повторения (кандидаты длиной 1)
     def get_start(self):
         start = set()
         for check in self.checks:
             start |= check
         return sorted(start)
 
-    def get_new_links(self, links):
-        # из частых наборов длины k строим кандидатов длины k+1:
-        # к каждому частому набору добавляем по одному товару
-        links_set = set(links)
-        products = sorted(set(p for link in links for p in link))
-        new_links = set()
-        for link in links:
-            for product in products:
-                if product in link:
-                    continue
-                candidate = tuple(sorted(link + (product,)))
-                if candidate in new_links:
-                    continue
-                # отсечение (главная идея Apriori): если хоть одно подмножество
-                # длины k не частое, то и кандидат частым быть не может
-                if all(sub in links_set for sub in combinations(candidate, len(link))):
-                    new_links.add(candidate)
-        return sorted(new_links)
+    def remove(self, min_supp, itemsets: dict):
+        return {prod: supp for prod, supp in itemsets.items() if supp >= min_supp}
 
-    def remove(self, min_supp, links: dict):
-        # оставляем только наборы с поддержкой не меньше порога
-        return {prod: supp for prod, supp in links.items() if supp >= min_supp}
-
+    # первый шаг, подсчет одиночных товаров
     def first_step(self, min_supp):
-        # шаг 1: одиночные товары
         current_dict = {}
         for product in self.start:
             current_dict[(product,)] = self.supp([product])
         return self.remove(min_supp, current_dict)
+
+    def get_new_itemsets(self, itemsets):
+        itemsets_set = set(itemsets)
+        products = sorted(set(p for itemset in itemsets for p in itemset))
+        new_itemsets = set()
+        for itemset in itemsets:
+            for product in products:
+                if product in itemset:
+                    continue
+                candidate = tuple(sorted(itemset + (product,)))
+                if candidate in new_itemsets:
+                    continue
+                if all(sub in itemsets_set for sub in combinations(candidate, len(itemset))):
+                    new_itemsets.add(candidate)
+        return sorted(new_itemsets)
 
     def algorithm(self, min_supp):
         self.all_frequent_items = {}
@@ -78,7 +72,7 @@ class Apriori:
 
         while frequent:
             self.all_frequent_items.update(frequent)
-            candidates = self.get_new_links(list(frequent.keys()))
+            candidates = self.get_new_itemsets(list(frequent.keys()))
             candidates_dict = {}
             for cand in candidates:
                 candidates_dict[cand] = self.supp(cand)
@@ -89,10 +83,8 @@ class Apriori:
     def sort_result(self, order):
         items = list(self.all_frequent_items.items())
         if order == "support":
-            # по убыванию поддержки (при равной поддержке - по алфавиту)
             items.sort(key=lambda x: (-x[1], x[0]))
         elif order == "lex":
-            # лексикографический порядок
             items.sort(key=lambda x: x[0])
         else:
             raise ValueError("order должен быть 'support' или 'lex'")
@@ -111,7 +103,6 @@ class Apriori:
         if out_path:
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
-            print(f"Результат сохранён в {out_path}")
 
     def visual(self, min_supps):
         times = []
@@ -160,13 +151,11 @@ class Apriori:
 
 
 if __name__ == "__main__":
-    # ---------- параметры программы ----------
-    PATH = "baskets.csv"   # набор данных
-    MIN_SUPP = 0.03        # порог поддержки (0.03 = 3%)
-    ORDER = "support"      # "support" - по убыванию поддержки, "lex" - лексикографически
+    PATH = "baskets.csv"
+    MIN_SUPP = 0.03
+    ORDER = "support"
 
     a = Apriori(PATH)
     a.print_result(MIN_SUPP, ORDER, out_path="result.txt")
 
-    # ---------- эксперименты для отчёта ----------
     a.visual([0.01, 0.03, 0.05, 0.1, 0.15])
