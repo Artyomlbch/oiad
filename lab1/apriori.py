@@ -72,6 +72,7 @@ class Apriori:
 
         while frequent:
             self.all_frequent_items.update(frequent)
+            # получаем кандидатов длиной k+1
             candidates = self.get_new_itemsets(list(frequent.keys()))
             candidates_dict = {}
             for cand in candidates:
@@ -90,7 +91,7 @@ class Apriori:
             raise ValueError("order должен быть 'support' или 'lex'")
         return items
 
-    def print_result(self, min_supp, order, out_path=None):
+    def print_result(self, min_supp, order):
         self.algorithm(min_supp)
         result = self.sort_result(order)
 
@@ -100,9 +101,7 @@ class Apriori:
             lines.append(f"{supp:.4f}  {{{', '.join(items)}}}")
 
         print("\n".join(lines))
-        if out_path:
-            with open(out_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
+
 
     def visual(self, min_supps):
         times = []
@@ -120,7 +119,7 @@ class Apriori:
 
         x_labels = [f"{s * 100:g}%" for s in min_supps]
 
-        # диаграмма 1: быстродействие
+        # диаграмма: быстродействие
         plt.figure()
         bars = plt.bar(x_labels, times)
         plt.bar_label(bars, fmt="%.3f")
@@ -129,7 +128,7 @@ class Apriori:
         plt.ylabel("Время (секунды)")
         plt.savefig("time.png", dpi=150, bbox_inches="tight")
 
-        # диаграмма 2: количество наборов разной длины
+        # диаграмма: количество наборов разной длины
         plt.figure()
         all_lens = sorted(set(l for f in counts for l in f))
         x = np.arange(len(x_labels))
@@ -152,10 +151,10 @@ class Apriori:
 
 if __name__ == "__main__":
     PATH = "baskets.csv"
-    MIN_SUPP = 0.03
+    MIN_SUPP = 0.15
     ORDER = "support"
 
     a = Apriori(PATH)
-    a.print_result(MIN_SUPP, ORDER, out_path="result.txt")
+    a.print_result(MIN_SUPP, ORDER)
 
     a.visual([0.01, 0.03, 0.05, 0.1, 0.15])
