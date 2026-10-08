@@ -162,8 +162,6 @@ class Apriori:
 
     def format_rule(self, rule):
         ante, cons, supp, conf = rule
-        # lift = conf / supp(C): во сколько раз A повышает вероятность C
-        # (не обязателен по заданию, но помогает в анализе: lift > 1 — реальная связь)
         lift = conf / self.all_frequent_items[cons]
         return (f"{supp:.4f}  {conf:.4f}  {lift:5.2f}  "
                 f"{{{', '.join(ante)}}} {ARROW} {{{', '.join(cons)}}}")
@@ -174,7 +172,6 @@ class Apriori:
 
         rules = self.all_rules
         if max_items is not None:
-            # антецедент и консеквент вместе содержат не более max_items объектов
             rules = [r for r in rules if len(r[0]) + len(r[1]) <= max_items]
         rules = self.sort_rules(order, rules)
 
@@ -200,11 +197,11 @@ class Apriori:
         print(f"min_supp = {min_supp}: частых наборов {len(self.all_frequent_items)}, "
               f"поиск наборов занял {time.perf_counter() - start_time:.3f} с")
 
-        times = []   # среднее время построения правил, мс
-        counts = []  # количество правил
+        times = []
+        counts = [] 
         for conf in min_confs:
             total = 0.0
-            for _ in range(repeats):  # повторяем, чтобы сгладить случайные колебания
+            for _ in range(repeats):
                 start_time = time.perf_counter()
                 self.rules(conf)
                 total += time.perf_counter() - start_time
@@ -235,11 +232,10 @@ class Apriori:
 
         plt.show()
 
-    # ====================================================================
 
     def visual(self, min_supps):
         times = []
-        counts = []   # для каждого порога: {длина набора: количество наборов}
+        counts = []
         for sup in min_supps:
             start_time = time.perf_counter()
             self.algorithm(sup)
@@ -285,19 +281,14 @@ class Apriori:
 
 if __name__ == "__main__":
     PATH = "baskets.csv"
-    MIN_SUPP = 0.01    # фиксированный порог поддержки
-    MIN_CONF = 0.50    # порог достоверности
-    ORDER = "support"  # "support" — по убыванию поддержки, "lex" — лексикографически
-    MAX_ITEMS = 7      # для п.4: не более 7 объектов в правиле
+    MIN_SUPP = 0.01
+    MIN_CONF = 0.50 
+    ORDER = "support"
+    MAX_ITEMS = 7     
 
     a = Apriori(PATH)
 
-    # п.1: все правила в виде антецедент → консеквент с поддержкой и достоверностью
-    a.print_rules(MIN_SUPP, MIN_CONF, ORDER)
-
-    # п.4: правила, где антецедент + консеквент содержат не более 7 объектов
     a.print_rules(MIN_SUPP, MIN_CONF, ORDER, max_items=MAX_ITEMS)
 
-    # п.2–3: min_supp фиксирован, min_conf от 70% до 95% с шагом 5%
     min_confs = [round(MIN_CONF + 0.05 * i, 2) for i in range(6)]
     a.visual_rules(MIN_SUPP, min_confs)
