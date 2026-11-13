@@ -1,4 +1,5 @@
 import time
+from collections import Counter
 from itertools import combinations
 
 import matplotlib.pyplot as plt
@@ -9,76 +10,46 @@ class Apriori:
     def __init__(self, path):
         self.checks = self.read_checks(path)
         self.count = len(self.checks)
-        self.start = self.get_start()
         self.all_frequent_items = {}
 
     def read_checks(self, path):
         for enc in ("utf-8-sig", "cp1251"):
             try:
-                checks = []
                 with open(path, encoding=enc) as f:
-                    for line in f:
-                        check = set(p.strip() for p in line.split(",") if p.strip())
-                        if check:
-                            checks.append(check)
-                return checks
+                    checks = [{p.strip() for p in line.split(",")} - {""} for line in f]
+                return [c for c in checks if c]
             except UnicodeDecodeError:
-                continue
+                pass
         raise ValueError("Не удалось прочитать файл " + path)
 
     def supp(self, products):
         products = set(products)
-        support = 0
-        for check in self.checks:
-            if products <= check:
-                support += 1
-        return support / self.count
+        return sum(products <= check for check in self.checks) / self.count
 
-    # получение список всех продуктов без повторения (кандидаты длиной 1)
-    def get_start(self):
-        start = set()
-        for check in self.checks:
-            start |= check
-        return sorted(start)
-
-    def remove(self, min_supp, itemsets: dict):
-        return {prod: supp for prod, supp in itemsets.items() if supp >= min_supp}
-
-    # первый шаг, подсчет одиночных товаров
-    def first_step(self, min_supp):
-        current_dict = {}
-        for product in self.start:
-            current_dict[(product,)] = self.supp([product])
-        return self.remove(min_supp, current_dict)
+    def remove(self, min_supp, candidates):
+        supports = {c: self.supp(c) for c in candidates}
+        return {c: s for c, s in supports.items() if s >= min_supp}
 
     def get_new_itemsets(self, itemsets):
         itemsets_set = set(itemsets)
-        products = sorted(set(p for itemset in itemsets for p in itemset))
+        products = sorted({p for itemset in itemsets for p in itemset})
         new_itemsets = set()
         for itemset in itemsets:
             for product in products:
                 if product in itemset:
                     continue
                 candidate = tuple(sorted(itemset + (product,)))
-                if candidate in new_itemsets:
-                    continue
                 if all(sub in itemsets_set for sub in combinations(candidate, len(itemset))):
                     new_itemsets.add(candidate)
         return sorted(new_itemsets)
 
     def algorithm(self, min_supp):
         self.all_frequent_items = {}
-        frequent = self.first_step(min_supp)
-
+        products = sorted(set().union(*self.checks))
+        frequent = self.remove(min_supp, [(p,) for p in products])
         while frequent:
             self.all_frequent_items.update(frequent)
-            # получаем кандидатов длиной k+1
-            candidates = self.get_new_itemsets(list(frequent.keys()))
-            candidates_dict = {}
-            for cand in candidates:
-                candidates_dict[cand] = self.supp(cand)
-            frequent = self.remove(min_supp, candidates_dict)
-
+            frequent = self.remove(min_supp, self.get_new_itemsets(list(frequent)))
         return self.all_frequent_items
 
     def sort_result(self, order):
@@ -94,32 +65,23 @@ class Apriori:
     def print_result(self, min_supp, order):
         self.algorithm(min_supp)
         result = self.sort_result(order)
-
-        lines = [f"Чеков: {self.count}, min_supp = {min_supp}, "
-                 f"порядок: {order}, найдено наборов: {len(result)}"]
+        print(f"Чеков: {self.count}, min_supp = {min_supp}, "
+              f"порядок: {order}, найдено наборов: {len(result)}")
         for items, supp in result:
-            lines.append(f"{supp:.4f}  {{{', '.join(items)}}}")
-
-        print("\n".join(lines))
-
+            print(f"{supp:.4f}  {{{', '.join(items)}}}")
 
     def visual(self, min_supps):
         times = []
-        counts = []   # для каждого порога: {длина набора: количество наборов}
+        counts = []
         for sup in min_supps:
             start_time = time.perf_counter()
             self.algorithm(sup)
             times.append(time.perf_counter() - start_time)
-
-            by_len = {}
-            for item in self.all_frequent_items:
-                by_len[len(item)] = by_len.get(len(item), 0) + 1
-            counts.append(by_len)
-            print(f"min_supp = {sup}: время {times[-1]:.3f} с, наборов по длинам {by_len}")
+            counts.append(Counter(len(item) for item in self.all_frequent_items))
+            print(f"min_supp = {sup}: время {times[-1]:.3f} с, наборов по длинам {dict(counts[-1])}")
 
         x_labels = [f"{s * 100:g}%" for s in min_supps]
 
-        # диаграмма: быстродействие
         plt.figure()
         bars = plt.bar(x_labels, times)
         plt.bar_label(bars, fmt="%.3f")
@@ -128,17 +90,13 @@ class Apriori:
         plt.ylabel("Время (секунды)")
         plt.savefig("time.png", dpi=150, bbox_inches="tight")
 
-        # диаграмма: количество наборов разной длины
         plt.figure()
-        all_lens = sorted(set(l for f in counts for l in f))
+        all_lens = sorted(set().union(*counts))
         x = np.arange(len(x_labels))
-        width = 0.8 / max(len(all_lens), 1)
-
+        width = 0.8 / len(all_lens)
         for i, l in enumerate(all_lens):
-            y = [f.get(l, 0) for f in counts]
-            bars = plt.bar(x + i * width, y, width, label=f"Длина {l}")
+            bars = plt.bar(x + i * width, [c[l] for c in counts], width, label=f"Длина {l}")
             plt.bar_label(bars, fontsize=8)
-
         plt.xticks(x + width * (len(all_lens) - 1) / 2, x_labels)
         plt.title("Количество частых наборов разной длины")
         plt.xlabel("Порог min_supp")
